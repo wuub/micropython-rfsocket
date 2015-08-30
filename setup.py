@@ -5,7 +5,7 @@ sys.path.pop(0)
 from setuptools import setup
 
 setup(name='micropython-rfsocket',
-      version='0.1',
+      version='0.1.1',
       description='rfsocket module for MicroPython ',
       long_description="This is a module implemented specifically for MicroPython.",
       url='https://github.com/wuub/micropython-rfsocket',
