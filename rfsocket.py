@@ -1,9 +1,39 @@
+#!/usr/bin/env python3
 
 import pyb
 
+def default_remote_id():
+    """generate remote id based on pyb.unique_id()"""
+    import uhashlib
+    from struct import unpack
+    # we compute a hash of board's unique_id, since a boards manufactured
+    # closely together probably share prefix or suffix, and I don't know
+    # which one. we want to avoid accidental remote_id clashes
+    unique_hash = uhashlib.sha256(pyb.unique_id()).digest()
+    # and a 4 byte prefix of a sha256 hash is more than enough
+    uint32 = unpack("I", unique_hash[:4])[0]
+    # let's mask it to 26 bits
+    uint26  = uint32 & (2**26 - 1)
+    return uint26
+
+def payload(remote_id, group, toggle, chan, unit):
+    """generate binary payload from given values"""
+    return (remote_id << 6) | (group << 5) | (toggle << 4) | (chan << 2) | unit
+
 
 class RFSocket:
-    """Control popular RF sockets"""
+    """Control popular 433MHz RF sockets:
+
+    >>> p = pyb.Pin('X1', pyb.Pin.OUT_PP)
+    >>> r = RFSocket(p, RFSocket.ANSLUT)
+    >>> r.on(1)  # or 2 or 3
+    >>> r.off(1)
+    >>> r.group_on()
+    >>> r.group_off()
+
+    By default each micropython board will have a unique remote_id
+    generated from pyb.unique_id().
+    """
 
     # timings
     T = 250         # base delay of 250 us/microseconds
@@ -31,33 +61,28 @@ class RFSocket:
         NEXA: {1: 0b11, 2: 0b10, 3: 0b01},
     }
 
-
-    def __init__(self, pin, remote_id, chann):
+    def __init__(self, pin, chann=ANSLUT, remote_id=None):
         self._pin = pin
-        self._remote_id = remote_id
         self._chann = chann
-
+        self._remote_id = remote_id or default_remote_id()
 
     def group_on(self):
         """turn on all the devices"""
-        payload = self._payload(self.GROUP, self.ON, self._chann, 0)
-        self._send(payload)
+        bits = payload(self._remote_id, self.GROUP, self.ON, self._chann, 0)
+        self._send(bits)
 
     def group_off(self):
         """turn off all the devices"""
-        payload = self._payload(self.GROUP, self.OFF, self._chann, 0)
-        self._send(payload)
+        bits = payload(self._remote_id, self.GROUP, self.OFF, self._chann, 0)
+        self._send(bits)
 
     def on(self, unit):
-        payload = self._payload(self.DEVICE, self.ON, self._chann, self.UNITS[self._chann][unit])
-        self._send(payload)
+        bits = payload(self._remote_id, self.DEVICE, self.ON, self._chann, self.UNITS[self._chann][unit])
+        self._send(bits)
 
     def off(self, unit):
-        payload = self._payload(self.DEVICE, self.OFF, self._chann, self.UNITS[self._chann][unit])
-        self._send(payload)
-
-    def _payload(self, group, toggle, chan, unit):
-        return (self._remote_id << 6) | (group << 5) | (toggle << 4) | (chan << 2) | unit
+        bits = payload(self._remote_id, self.DEVICE, self.OFF, self._chann, self.UNITS[self._chann][unit])
+        self._send(bits)
 
     @staticmethod
     def _phys(t, m, high, low, udelay=pyb.udelay):
