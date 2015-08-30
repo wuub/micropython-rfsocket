@@ -1,5 +1,5 @@
 # micropython-rfsocket
-Micropython implementation of popular 433MHzn based RFSockets (i.e. Anslut/Proove/Nexa)
+Micropython implementation of popular 433MHz based RF Sockets (i.e. Anslut/Proove/Nexa) using cheapo FS1000A transmitter. 
 
 ## Installation
 
@@ -8,6 +8,8 @@ Micropython implementation of popular 433MHzn based RFSockets (i.e. Anslut/Proov
   3. Install micropython-rfsocket there like this `python -m upip install -p /media/[your-login]/45DE-XXXX/lib micropython-rfsocket`
   4. Use in `main.py` like this: `from rfsocket import RFSocket`
 
+## Range
+As far as I can tell FS100A transmitter connected to 3V3 seems to be at least twice as strong as the remote sold with the sockets. Stock remote is spotty at best. FS1000A was able to reliably toggle the socket trough multiple walls.  
 
 ## Basic usage
 
