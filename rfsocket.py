@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 
-import pyb
+import machine
+import utime
 
 def default_remote_id():
-    """generate remote id based on pyb.unique_id()"""
+    """generate remote id based on machine.unique_id()"""
     import uhashlib
-    from struct import unpack
+    from ustruct import unpack
     # we compute a hash of board's unique_id, since a boards manufactured
     # closely together probably share prefix or suffix, and I don't know
     # which one. we want to avoid accidental remote_id clashes
-    unique_hash = uhashlib.sha256(pyb.unique_id()).digest()
+    unique_hash = uhashlib.sha256(machine.unique_id()).digest()
     # and a 4 byte prefix of a sha256 hash is more than enough
     uint32 = unpack("I", unique_hash[:4])[0]
     # let's mask it to 26 bits
@@ -21,20 +22,7 @@ def payload(remote_id, group, toggle, chan, unit):
     return (remote_id << 6) | (group << 5) | (toggle << 4) | (chan << 2) | unit
 
 
-class RFSocket:
-    """Control popular 433MHz RF sockets:
-
-    >>> p = pyb.Pin('X1', pyb.Pin.OUT_PP)
-    >>> r = RFSocket(p, RFSocket.ANSLUT)
-    >>> r.on(1)  # or 2 or 3
-    >>> r.off(1)
-    >>> r.group_on()
-    >>> r.group_off()
-
-    By default each micropython board will have a unique remote_id
-    generated from pyb.unique_id().
-    """
-
+class RFTimings:
     # timings
     T = 250         # base delay of 250 us/microseconds
     ONE = T         #  ^_
@@ -42,6 +30,27 @@ class RFSocket:
     START = 10 * T  #  ^__________
     STOP = 40 * T   #  ^________________________________________
     RETRIES = 5     # number of times, each message is sent
+
+
+class Esp8266Timings(RFTimings):
+    T = 210
+    ONE = 130
+    RETRIES = 7
+
+
+class RFSocket:
+    """Control popular 433MHz RF sockets:
+
+    >>> p = Pin('X1', Pin.OUT_PP)
+    >>> r = RFSocket(p, RFSocket.ANSLUT)
+    >>> r.on(1)  # or 2 or 3
+    >>> r.off(1)
+    >>> r.group_on()
+    >>> r.group_off()
+
+    By default each micropython board will have a unique remote_id
+    generated from machine.unique_id().
+    """
 
     # group values
     GROUP = 0  # control a whole group
@@ -61,10 +70,11 @@ class RFSocket:
         NEXA: {1: 0b11, 2: 0b10, 3: 0b01},
     }
 
-    def __init__(self, pin, chann=ANSLUT, remote_id=None):
+    def __init__(self, pin, chann=ANSLUT, remote_id=None, timings=RFTimings):
         self._pin = pin
         self._chann = chann
         self._remote_id = remote_id or default_remote_id()
+        self._timings = timings
 
     def group_on(self):
         """turn on all the devices"""
@@ -85,7 +95,7 @@ class RFSocket:
         self._send(bits)
 
     @staticmethod
-    def _phys(t, m, high, low, udelay=pyb.udelay):
+    def _phys(t, m, high, low, udelay=utime.sleep_us):
         """send one physical 'bit' of information, either ONE, ZERO, START or STOP
            using high, low and udelay locals for performance and better timing"""
         high()
@@ -95,7 +105,7 @@ class RFSocket:
 
     def _send(self, msg):
         """send msg to the transmitter, repeat it appropriate number of times"""
-        for _ in range(self.RETRIES):
+        for _ in range(self._timings.RETRIES):
             self._send_one(msg)
 
     def _send_one(self, msg):
@@ -103,7 +113,7 @@ class RFSocket:
 
         # bring some of the stuff as local variables, this greately
         # improves/stabilizes message signal timings
-        t, one, zero, start, stop = self.T, self.ONE, self.ZERO, self.START, self.STOP
+        t, one, zero, start, stop = self._timings.T, self._timings.ONE, self._timings.ZERO, self._timings.START, self._timings.STOP
         high = self._pin.high
         low = self._pin.low
         _phys = self._phys
