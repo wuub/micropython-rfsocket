@@ -14,7 +14,7 @@ def default_remote_id():
     # and a 4 byte prefix of a sha256 hash is more than enough
     uint32 = unpack("I", unique_hash[:4])[0]
     # let's mask it to 26 bits
-    uint26  = uint32 & (2**26 - 1)
+    uint26 = uint32 & (2**26 - 1)
     return uint26
 
 def payload(remote_id, group, toggle, chan, unit):
@@ -39,7 +39,8 @@ class Esp8266Timings(RFTimings):
 
 
 class RFSocket:
-    """Control popular 433MHz RF sockets:
+    """
+    Control popular 433MHz RF sockets.
 
     >>> p = Pin('X1', Pin.OUT_PP)
     >>> r = RFSocket(p, RFSocket.ANSLUT)
@@ -70,47 +71,59 @@ class RFSocket:
         NEXA: {1: 0b11, 2: 0b10, 3: 0b01},
     }
 
-    def __init__(self, pin, chann=ANSLUT, remote_id=None, timings=RFTimings):
+    def __init__(self, pin, chann=ANSLUT, remote_id=0, timings=RFTimings):
         self._pin = pin
         self._chann = chann
-        self._remote_id = remote_id or default_remote_id()
+        self._remote_id = (remote_id & (2**26 - 1)) or default_remote_id()
         self._timings = timings
+        self._status = [False, False, False]
 
     def group_on(self):
-        """turn on all the devices"""
+        """Turn on all the devices."""
         bits = payload(self._remote_id, self.GROUP, self.ON, self._chann, 0)
         self._send(bits)
+        for i in range(3):
+            self._status[i] = True
 
     def group_off(self):
-        """turn off all the devices"""
+        """Turn off all the devices."""
         bits = payload(self._remote_id, self.GROUP, self.OFF, self._chann, 0)
         self._send(bits)
+        for i in range(3):
+            self._status[i] = False
 
     def on(self, unit):
         bits = payload(self._remote_id, self.DEVICE, self.ON, self._chann, self.UNITS[self._chann][unit])
         self._send(bits)
+        self._status[unit - 1] = True
 
     def off(self, unit):
         bits = payload(self._remote_id, self.DEVICE, self.OFF, self._chann, self.UNITS[self._chann][unit])
         self._send(bits)
+        self._status[unit - 1] = False
+
+    def status(self):
+        return tuple(self._status)
 
     @staticmethod
     def _phys(t, m, high, low, udelay=utime.sleep_us):
-        """send one physical 'bit' of information, either ONE, ZERO, START or STOP
-           using high, low and udelay locals for performance and better timing"""
+        """
+        Send one physical 'bit' of information, either ONE, ZERO, START or STOP.
+
+        Using high, low and udelay locals for performance and better timing.
+        """
         high()
         udelay(t)
         low()
         udelay(m)
 
     def _send(self, msg):
-        """send msg to the transmitter, repeat it appropriate number of times"""
+        """Send msg to the transmitter, repeat it appropriate number of times."""
         for _ in range(self._timings.RETRIES):
             self._send_one(msg)
 
     def _send_one(self, msg):
-        """send a single 32bit message"""
-
+        """Send a single 32bit message."""
         # bring some of the stuff as local variables, this greately
         # improves/stabilizes message signal timings
         t, one, zero, start, stop = self._timings.T, self._timings.ONE, self._timings.ZERO, self._timings.START, self._timings.STOP
