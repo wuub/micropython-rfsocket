@@ -15,7 +15,7 @@ REMOTES = {}
 def remote(remote_id_str):
     remote_id = int(remote_id_str)
     if remote_id not in REMOTES:
-        REMOTES[remote_id] = RFSocket(rf_pin, RFSocket.ANSLUT, timings=Esp8266Timings)
+        REMOTES[remote_id] = RFSocket(rf_pin, RFSocket.ANSLUT, remote_id=remote_id, timings=Esp8266Timings)
     return REMOTES[remote_id]
 
 
